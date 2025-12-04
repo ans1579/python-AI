@@ -7,6 +7,8 @@ import requests
 from datetime import datetime
 from dotenv import load_dotenv
 import google.generativeai as genai
+import argparse
+
 
 # [ 5core 연동 기본 설정 ]
 
@@ -56,6 +58,7 @@ model = genai.GenerativeModel(
     model_name = MODEL_NAME,
     system_instruction = system_instruction
 )
+
 
 # [ 5core 연동 함수 ]
 
@@ -134,6 +137,36 @@ def get_vehicles(need_info: dict) -> dict:
                 "fuelType": "전기"
             }
         ]
+
+# 차량 이미지 URL 생성
+def get_vehicle_image_url(recommends: dict) -> str:
+    # 추천 차량 정보의 fileName을 읽어서 URL 생성
+    # /5core/images/{fileName} 형태의 URL을 만들어 줌
+    file_name = recommends.get("fileName")
+    return f"http://localhost:8090/5core/images/{file_name}"
+
+
+# 차량 이미지와 가격을 불러오지 못하는 문제 해결
+# 추천된 차량의 modelCode로 fileName과 finalPrice를 불러와서 저장
+def get_recommended_vehicles_info(recommends: list, candidates: list) -> None:
+    # modelCode를 소문자로 변환 (기호는 상관없음)
+    small_code = {str(c.get("modelCode")).lower(): c for c in candidates}
+
+    for r in recommends:
+        code = str(r.get("modelCode")).lower()
+        src = small_code.get(code)
+        if not src:
+            continue
+
+        # 이미지 파일명 저장
+        if not r.get("fileName"):
+            r["fileName"] = src.get("fileName")
+        
+        # 가격 저장
+        if not r.get("finalPrice"):
+            r["finalPrice"] = src.get("finalPrice")
+
+
 
 # AI가 뽑은 차량 후보 리스트를 5core에 저장 - 딜러가 확인하는 용도
 def save_ai_vehicle_list(counseling_id: int, result: dict) -> bool:
@@ -251,26 +284,71 @@ def ask_gemini(counseling_json: dict, need_info: dict, candidates: list, max_cou
         return {"추천": []}
 
 # [ Streamlit 설정 ]
+st.set_page_config(page_title = "5core AI 차량 추천", layout = "wide")
+st.subheader("5core 딜러용 AI 차량 추천 (Gemini)")
 
-st.set_page_config(page_title="5core AI 차량 추천")
-st.title("5core 딜러용 AI 차량 추천 (Gemini)")
+# streamlit 전체적인 html설정 (css 작성)
+st.markdown(
+    """
+    <style>
+    /* 전체적인 색 설정 */
+    .stApp {
+        background-color: #ffffff;
+        color: #000000;
+    }
 
-# URL에서 상담ID 읽기
-st_params = st.query_params  
-c_id = st_params.get("counselingId", None)
+    /* 전체 넓이 */
+    .block-container {
+        max-width: 1600px;
+    }
 
-if c_id is None or c_id == "":
-    st.error("URL에 counselingId 쿼리 파라미터가 없습니다. 예: ?counselingId=1")
-    st.stop()
+    /* 차량 이미지 */
+    .ai-card img {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+    }
 
-# 혹시 리스트로 올 수도 있으니 방어코드
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# 실행 인자 + URL 에서 상담 ID 가져오기
+# 커맨드라인 인자 파싱 (예: --counselingId=1)
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument("--counselingId")
+args, _ = parser.parse_known_args()
+default_counseling_id = args.counselingId  # 문자열 또는 None
+
+# URL 쿼리파라미터에서 먼저 시도 (?counselingId=1)
+params = st.query_params
+
+counseling_id = None
+
+c_id = params.get("counselingId", None)
 if isinstance(c_id, list):
     c_id = c_id[0]
 
-try:
-    counseling_id = int(c_id)
-except ValueError:
-    st.error(f"URL의 counselingId가 숫자가 아닙니다: {c_id}")
+if c_id:
+    try:
+        counseling_id = int(c_id)
+    except ValueError:
+        st.error(f"URL의 counselingId가 숫자가 아닙니다: {c_id}")
+        st.stop()
+
+# URL에 없으면 실행 인자(--counselingId)를 사용
+elif default_counseling_id is not None:
+    try:
+        counseling_id = int(default_counseling_id)
+    except ValueError:
+        st.error(f"실행 인자의 counselingId가 잘못되었습니다: {default_counseling_id}")
+        st.stop()
+
+# 둘 다 없으면 에러
+if counseling_id is None:
+    st.error("URL 또는 실행 인자로 counselingId가 필요합니다. 예: ?counselingId=1")
     st.stop()
 
 counseling_json = get_counseling(counseling_id)
@@ -294,7 +372,7 @@ if st.session_state["counseling_json"] is None:
     if counseling_json:
         st.session_state["counseling_json"] = counseling_json
         st.session_state["need_info"] = extract_need(counseling_json)
-        st.success(f"상담 정보를 불러왔습니다. (상담ID = {counseling_id})")
+        # st.success(f"상담 정보를 불러왔습니다. (상담ID = {counseling_id})")
     else:
         st.error("상담 정보를 불러오지 못했습니다.")
         st.stop()
@@ -302,11 +380,14 @@ if st.session_state["counseling_json"] is None:
 counseling_json = st.session_state["counseling_json"]
 need_info = st.session_state["need_info"]
 
-st.subheader("상담 정보")
-st.json(counseling_json)
+############################
+# JSON 정보는 주석처리 해둠
+# st.subheader("상담 정보")
+# st.json(counseling_json)
 
-st.subheader("고객 요구사항")
-st.json(need_info)
+# st.subheader("고객 요구사항")
+# st.json(need_info)
+############################
 
 # 후보 차량 자동 조회
 if st.session_state["candidates"] is None:
@@ -314,16 +395,19 @@ if st.session_state["candidates"] is None:
         candidates = get_vehicles(need_info or {})
     st.session_state["candidates"] = candidates
     st.session_state["recommend_result"] = None
-    st.success(f"후보 차량 {len(candidates)}대를 불러왔습니다.")
+    # st.success(f"후보 차량 {len(candidates)}대를 불러왔습니다.")
 
 candidates = st.session_state["candidates"]
 
-if candidates:
-    st.subheader("후보 차량 리스트")
-    st.json(candidates)
-else:
-    st.warning("조건에 맞는 차량이 없습니다.")
-    st.stop()
+############################
+# JSON 정보는 주석처리 해둠
+# if candidates:
+#     st.subheader("후보 차량 리스트")
+#     st.json(candidates)
+# else:
+#     st.warning("조건에 맞는 차량이 없습니다.")
+#     st.stop()
+############################
 
 # AI 추천 자동 생성
 MAX_COUNT = 3
@@ -336,42 +420,105 @@ if st.session_state["recommend_result"] is None:
             candidates = candidates,
             max_count = MAX_COUNT
         )
-    st.session_state["recommend_result"] = result
-    st.success("AI 추천이 끝났습니다.")
+    
+    # 추천 리스트에서 이미지 경로와 가격 저장
+    # - 이미지와 가격 정보를 불러오지 못하는 문제 해결
+    recommends = result.get("추천")
+    get_recommended_vehicles_info(recommends, candidates)
 
+    st.session_state["recommend_result"] = result
+    # st.success("AI 추천이 끝났습니다.")
+
+
+# --- AI 추천 결과 표시 ---
 recommend_result = st.session_state["recommend_result"]
 
 if recommend_result:
-    st.subheader("AI 추천 결과")
-    st.json(recommend_result)
+    # JSON은 주석 처리했음
+    # st.json(recommend_result)
 
-    recommends = recommend_result.get("recommendations") or []
+    recommends = recommend_result.get("추천") or []
+
+    # 전체후보 중 3대만 추천
+    recommends = recommends[:3]
     
     if recommends:
-        st.markdown("-- AI의 추천 결과 --")
-        option_labels = []
-        for idx, r in enumerate(recommends, start = 1):
-            label = f"{idx}- {r.get('name')} {r.get('modelCode')} {r.get('vehicleType')}"
-            option_labels.append(label)
-            st.markdown(f"""
-                    --- {label} ---
-                    이유: {r.get('reason')}
-                        """)
-        
-        st.markdown("--------------------")
-        st.markdown("딜러 최종 선택")
+        st.markdown("AI 추천 결과")
 
-        selected_label = st.radio(
-            "고객에게 추천할 최종 차량을 선택하세요.",
-            option_labels,
-            index = 0
+        # 처음 들어왔을 때 첫번째가 선택되어있음 기본 선택값 = 0번
+        # 이유가 선택되어있는 것 (딜러의 최종선택 x)
+        if "selected_reco_idx" not in st.session_state:
+            st.session_state["selected_reco_idx"] = 0
+
+        # 3열 레이아웃
+        cols = st.columns(3)
+
+        for idx, r in enumerate(recommends):
+            name = r.get("name", "")
+            type = r.get("vehicleType", "")
+            fuel = r.get("fuelType", "")
+            price = r.get("finalPrice")
+
+            with cols[idx]:
+                # div 시작
+                st.markdown('<div class="ai-card">', unsafe_allow_html = True)
+
+                # 차 이미지
+                img_url = get_vehicle_image_url(r)
+                st.image(img_url, width = 320)
+
+                 # 차량 이름 bold
+                st.markdown(
+                f"<p style='font-size:20px; font-weight:700; margin:8px 0 4px 0;'>{name}</p>",
+                unsafe_allow_html = True,
+                )
+
+                # 차량 정보
+                st.markdown(
+                    f"<p style='margin:0; font-size:14px;'>차종: {type}</p>",
+                    unsafe_allow_html = True,
+                )
+                st.markdown(
+                    f"<p style='margin:0; font-size:14px;'>연료: {fuel}</p>",
+                    unsafe_allow_html = True,
+                )
+                if price is not None:
+                    st.markdown(
+                        f"<p style='margin:0 0 8px 0; font-size:14px;'>가격: {price:,} 원</p>",
+                        unsafe_allow_html = True,
+                    )
+                else:
+                    st.markdown(
+                        "<p style='margin:0 0 8px 0; font-size:14px;'>가격: -</p>",
+                        unsafe_allow_html = True,
+                    )
+
+                # 버튼을 카드 폭 전체로(가로로 길게)
+                if st.button("이 차량 선택 / 이유 보기", key=f"select_{idx}", use_container_width=True):
+                    st.session_state["selected_reco_idx"] = idx
+                
+                # div 끝
+                st.markdown('</div>', unsafe_allow_html = True)
+
+        # 아래에 선택된 차량 이유 보여주기
+        selected_idx = st.session_state["selected_reco_idx"]
+        selected = recommends[selected_idx]
+
+        st.markdown("---")
+        st.markdown("### 선택한 차량 이유")
+
+        st.markdown(
+            f"""
+**{selected.get('name', '')} ({selected.get('modelCode', '')})** 에 대한 추천 이유:
+
+> {selected.get('reason', '이유가 없습니다.')}
+"""
         )
 
-        selected_index = option_labels.index(selected_label)
-        final_choice = recommends[selected_index]
 
-        st.write("선택한 차량: ")
-        st.json(final_choice)
+        # 딜러 최종 선택 + 저장 버튼들
+        st.markdown("---")
+        st.markdown("### 딜러 최종 선택 및 저장")
 
         col1, col2 = st.columns(2)
 
@@ -383,11 +530,11 @@ if recommend_result:
 
         with col2:
             if st.button("선택한 차량을 최종 추천으로 5core에 저장"):
-                ok = save_final_choice(counseling_id, final_choice)
+                ok = save_final_choice(counseling_id, selected)
                 if ok:
                     st.success("최종 추천 차량을 5core에 저장했습니다.")
     else:
-        st.info("recommendations 리스트가 비어 있습니다.")
+        st.info("추천 결과가 비어 있습니다.")
 else:
     st.info("AI 추천 결과가 없습니다.")
 
