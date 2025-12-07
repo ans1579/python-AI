@@ -12,9 +12,11 @@ import argparse
 
 # [ 5core 연동 기본 설정 ]
 
-load_dotenv()
+load_dotenv(override=True)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+st.write("현재 사용 중인 GEMINI_API_KEY =", GEMINI_API_KEY[:8] if GEMINI_API_KEY else "없음")
+
 FIVECORE_BASE_URL = os.environ.get("FIVECORE_BASE_URL", "http://localhost:8090/5core")
 
 # Counseling 상세 조회 경로
@@ -325,6 +327,13 @@ st.markdown(
         padding-right: 4px !important;
     }
 
+    div.stButton > button[kind="secondary"] {
+        padding: 16px 0 !important;   /* 버튼 높이 */
+        font-size: 16px !important;   /* 글자 크기 */
+        font-weight: 600 !important;  /* 글자 굵기 */
+        border-radius: 999px !important; /* 둥글게 */
+    }
+    
 
     </style>
     """,
@@ -492,25 +501,25 @@ if recommend_result:
                         st.image(img_url)
 
                         st.markdown(
-                            f"<p style='font-size:15px; font-weight:700; margin:4px 0 2px 0;'>{name}</p>",
+                            f"<p style='font-size:17px; font-weight:700; margin:4px 0 2px 0;'>{name}</p>",
                             unsafe_allow_html=True,
                         )
                         st.markdown(
-                            f"<p style='margin:0; font-size:12px;'>차종: {vtype}</p>",
+                            f"<p style='margin:0; font-size:15px;'>차종: {vtype}</p>",
                             unsafe_allow_html=True,
                         )
                         st.markdown(
-                            f"<p style='margin:0; font-size:12px;'>연료: {fuel}</p>",
+                            f"<p style='margin:0; font-size:15px;'>연료: {fuel}</p>",
                             unsafe_allow_html=True,
                         )
                         if price is not None:
                             st.markdown(
-                                f"<p style='margin:0 0 6px 0; font-size:12px;'>가격: {price:,} 원</p>",
+                                f"<p style='margin:0 0 12px 0; font-size:15px;'>가격: {price:,} 원</p>",
                                 unsafe_allow_html=True,
                             )
                         else:
                             st.markdown(
-                                "<p style='margin:0 0 6px 0; font-size:12px;'>가격: -</p>",
+                                "<p style='margin:0 0 6px 0; font-size:15px;'>가격: -</p>",
                                 unsafe_allow_html=True,
                             )
 
@@ -522,39 +531,29 @@ if recommend_result:
         selected_idx = st.session_state["selected_reco_idx"]
         selected = recommends[selected_idx]
 
-        st.markdown("---")
-        st.markdown("### 차량을 추천하는 이유")
+st.markdown("<hr style='margin:8px 0;' />", unsafe_allow_html=True)
 
-        st.markdown(
-            f"""
+
+# 이유
+st.markdown("### 차량을 추천하는 이유")
+st.markdown(
+    f"""
 **{selected.get('name', '')}** 를 추천합니다:
 
 > {selected.get('reason', '이유가 없습니다.')}
 """
-        )
+)
 
+# 이유 아래에 여백 조금 주고
+st.markdown("<div style='height:24px;'></div>", unsafe_allow_html=True)
 
-        # 딜러 최종 선택 + 저장 버튼들
-        st.markdown("---")
-        st.markdown("### 딜러 최종 선택 및 저장")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            if st.button("AI 추천 후보 리스트를 5core에 저장"):
-                ok = save_ai_vehicle_list(counseling_id, recommend_result)
-                if ok:
-                    st.success("AI 추천 후보 리스트를 5core에 저장했습니다.")
-
-        with col2:
-            if st.button("선택한 차량을 최종 추천으로 5core에 저장"):
-                ok = save_final_choice(counseling_id, selected)
-                if ok:
-                    st.success("최종 추천 차량을 5core에 저장했습니다.")
-    else:
-        st.info("추천 결과가 비어 있습니다.")
-else:
-    st.info("AI 추천 결과가 없습니다.")
+# 버튼을 가운데 정렬하고 싶으면 열 3개 만들어서 가운데 열에만 버튼 배치
+btn_left, btn_center, btn_right = st.columns([1, 2, 1])
+with btn_center:
+    if st.button("선택한 차량을 최종 추천", key="final_choice", use_container_width=True):
+        ok = save_final_choice(counseling_id, selected)
+        if ok:
+            st.success("최종 추천 차량을 5core에 저장했습니다.")
 
 
 
