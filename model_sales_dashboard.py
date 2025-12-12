@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 
-# 기업급 CSS
+# CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -31,7 +31,7 @@ st.markdown("""
 
 st.set_page_config(page_title="HMC 판매 분석", layout="wide", initial_sidebar_state="collapsed")
 
-# 기업급 헤더
+# 헤더
 st.markdown("""
 <div class="header-section">
     <h1 class="header-title">현대차 판매 실적 분석</h1>

@@ -3,3 +3,6 @@ google-generativeai
 requests
 python-dotenv
 plotly
+matplotlib
+statsmodels
+openpyxl

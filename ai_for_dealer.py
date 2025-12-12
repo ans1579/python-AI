@@ -12,6 +12,12 @@ import argparse
 
 # [ 5core 연동 기본 설정 ]
 
+# 배포용 백엔드 주소
+BACKEND_BASE_URL = os.getenv(
+    "BACKEND_BASE_URL",
+    "http://localhost:8090/5core"   # 로컬 테스트용 기본값
+)
+
 load_dotenv(override=True)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -143,9 +149,11 @@ def get_vehicles(need_info: dict) -> dict:
 # 차량 이미지 URL 생성
 def get_vehicle_image_url(recommends: dict) -> str:
     # 추천 차량 정보의 fileName을 읽어서 URL 생성
-    # /5core/images/{fileName} 형태의 URL을 만들어 줌
     file_name = recommends.get("fileName")
-    return f"http://localhost:8090/5core/images/{file_name}"
+    if not file_name:
+        return ""   # 혹은 None 등 상황에 맞게 처리
+    
+    return f"{BACKEND_BASE_URL}/images/{file_name}"
 
 
 # 차량 이미지와 가격을 불러오지 못하는 문제 해결
